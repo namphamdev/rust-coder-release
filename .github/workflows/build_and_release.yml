@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - platform: macos-14
             args: --target universal-apple-darwin
             targetPath: target/universal-apple-darwin/release/bundle
           - platform: windows-latest
@@ -38,18 +38,13 @@ jobs:
           ref: ${{ inputs.private_branch }}
           path: . 
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
 
       - name: Install macOS targets
-        if: matrix.platform == 'macos-latest'
+        if: matrix.platform == 'macos-14'
         run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
 
       - name: Rust cache
@@ -79,7 +74,7 @@ jobs:
         run: bun add --global @tauri-apps/cli
 
       - name: Import Apple Certificate
-        if: matrix.platform == 'macos-latest'
+        if: matrix.platform == 'macos-14'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -124,12 +119,12 @@ jobs:
         with:
           name: artifacts-${{ matrix.platform }}
           path: |
-            src-tauri/target/**/bundle/**/*.dmg
-            src-tauri/target/**/bundle/**/*.exe
-            src-tauri/target/**/bundle/**/*.msi
-            src-tauri/target/**/bundle/**/*.zip
-            src-tauri/target/**/bundle/**/*.sig
-            src-tauri/target/**/bundle/**/*.json
+            **/target/**/bundle/**/*.dmg
+            **/target/**/bundle/**/*.exe
+            **/target/**/bundle/**/*.msi
+            **/target/**/bundle/**/*.zip
+            **/target/**/bundle/**/*.sig
+            **/target/**/bundle/**/*.json
 
   publish:
     needs: build
@@ -144,7 +139,7 @@ jobs:
 
       - name: Prepare Release Assets
         run: |
-          mkdir release_assets
+          mkdir -p release_assets artifacts
           
           # Move binaries and signatures
           find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.zip" -o -name "*.sig" \) -exec cp {} release_assets/ \;
@@ -157,16 +152,21 @@ jobs:
           
           # Start with an empty base structure or the first json found
           FIRST_JSON=$(find artifacts -name "*.json" | head -n 1)
-          cp "$FIRST_JSON" release_assets/latest.json
           
-          # Iterate over all JSONs and merge their 'platforms' key into latest.json
-          for json in $(find artifacts -name "*.json"); do
-            echo "Merging $json..."
-            jq -s '.[0].platforms * .[1].platforms as $p | .[0] + {platforms: $p}' release_assets/latest.json "$json" > release_assets/temp.json && mv release_assets/temp.json release_assets/latest.json
-          done
-          
-          echo "Final latest.json content:"
-          cat release_assets/latest.json
+          if [ -n "$FIRST_JSON" ]; then
+            cp "$FIRST_JSON" release_assets/latest.json
+            
+            # Iterate over all JSONs and merge their 'platforms' key into latest.json
+            for json in $(find artifacts -name "*.json"); do
+              echo "Merging $json..."
+              jq -s '.[0].platforms * .[1].platforms as $p | .[0] + {platforms: $p}' release_assets/latest.json "$json" > release_assets/temp.json && mv release_assets/temp.json release_assets/latest.json
+            done
+            
+            echo "Final latest.json content:"
+            cat release_assets/latest.json
+          else
+            echo "No JSON artifacts found, skipping merge."
+          fi
           
           echo "Assets to publish:"
           ls -la release_assets/
