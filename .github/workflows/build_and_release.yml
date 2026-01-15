@@ -1,0 +1,84 @@
+name: Build and Release from Private Repo
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for the release (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      private_branch:
+        description: 'Branch to build from private repo'
+        required: true
+        default: 'main'
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest]
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout Private Repository
+        uses: actions/checkout@v4
+        with:
+          repository: namphamdev/code-agent-gui
+          token: ${{ secrets.PRIVATE_REPO_ACCESS_TOKEN }}
+          ref: ${{ inputs.private_branch }}
+          path: . 
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        working-directory: ./ui
+        run: npm install
+
+      - name: Build frontend
+        working-directory: ./ui
+        run: npm run build
+
+      - name: Build Tauri App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ inputs.tag_name }}
+          releaseName: 'App ${{ inputs.tag_name }}'
+          releaseBody: 'Automated build from private repository.'
+          releaseDraft: true
+          prerelease: false
+          args: --target universal-apple-darwin
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir release_assets
+          
+          # Move DMG
+          # Check both locations (universal vs standard) to be safe
+          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg release_assets/ 2>/dev/null || cp src-tauri/target/release/bundle/dmg/*.dmg release_assets/
+          
+          # Find and Rename JSON
+          find src-tauri/target -name "*.json" -maxdepth 4 -exec cp {} release_assets/latest.json \;
+          
+          echo "Listing assets:"
+          ls -la release_assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release_assets/*
+          tag_name: ${{ inputs.tag_name }}
+          draft: false
+          prerelease: false
