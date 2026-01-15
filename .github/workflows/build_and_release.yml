@@ -46,13 +46,18 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
       - name: Install frontend dependencies
         working-directory: ./ui
-        run: npm install --legacy-peer-deps
+        run: bun install
 
       - name: Build frontend
         working-directory: ./ui
-        run: npm run build
+        run: bun run build
 
       - name: Build Tauri App
         uses: tauri-apps/tauri-action@v0
