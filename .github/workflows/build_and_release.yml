@@ -76,6 +76,7 @@ jobs:
         run: bun install
 
       - name: Update Version in tauri.conf.json
+        shell: bash
         run: |
           VERSION=${{ inputs.tag_name }}
           if [[ $VERSION == v* ]]; then
