@@ -47,11 +47,16 @@ jobs:
         if: matrix.platform == 'macos-14'
         run: rustup target add aarch64-apple-darwin
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
         with:
-          workspaces: './src-tauri -> target'
-          cache-all-crates: "true"
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
@@ -59,7 +64,7 @@ jobs:
           bun-version: latest
 
       - name: Bun cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
@@ -69,6 +74,31 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ./ui
         run: bun install
+
+      - name: Patch Tauri Configuration
+        working-directory: ./src-tauri
+        env:
+          TAURI_SIGNING_PUBLIC_KEY: ${{ secrets.TAURI_SIGNING_PUBLIC_KEY }}
+        run: |
+          echo "Patching tauri.conf.json to enable updater..."
+          if [ -f "tauri.conf.json" ]; then
+            # Enable updater and set endpoint
+            tmp=$(mktemp)
+            jq '.tauri.updater.active = true | .tauri.updater.endpoints = ["https://github.com/namphamdev/rust-coder-release/releases/latest/download/latest.json"]' tauri.conf.json > "$tmp" && mv "$tmp" tauri.conf.json
+            
+            # Inject Public Key if secret exists
+            if [ -n "$TAURI_SIGNING_PUBLIC_KEY" ]; then
+              echo "Injecting public key..."
+              tmp=$(mktemp)
+              jq --arg key "$TAURI_SIGNING_PUBLIC_KEY" '.tauri.updater.pubkey = $key' tauri.conf.json > "$tmp" && mv "$tmp" tauri.conf.json
+            fi
+            
+            cat tauri.conf.json
+          else
+            echo "tauri.conf.json not found in $(pwd)"
+            ls -R
+            exit 1
+          fi
 
       - name: Install Tauri CLI
         run: bun add --global @tauri-apps/cli
@@ -139,34 +169,57 @@ jobs:
 
       - name: Prepare Release Assets
         run: |
-          mkdir -p release_assets artifacts
+          mkdir -p release_assets
           
-          # Move binaries and signatures
-          find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.zip" -o -name "*.sig" \) -exec cp {} release_assets/ \;
+          echo "Initializing latest.json..."
+          TAG_NAME="${{ inputs.tag_name }}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo '{"version": "'"$TAG_NAME"'", "notes": "Update for '"$TAG_NAME"'", "pub_date": "'"$PUB_DATE"'", "platforms": {}}' > release_assets/latest.json
           
-          # Merge JSONs for updater
-          # We use jq to merge the platforms object from all json files
-          # Make sure jq is installed (it is on ubuntu-latest)
-          
-          echo "Merging JSON update signatures..."
-          
-          # Start with an empty base structure or the first json found
-          FIRST_JSON=$(find artifacts -name "*.json" | head -n 1)
-          
-          if [ -n "$FIRST_JSON" ]; then
-            cp "$FIRST_JSON" release_assets/latest.json
-            
-            # Iterate over all JSONs and merge their 'platforms' key into latest.json
-            for json in $(find artifacts -name "*.json"); do
-              echo "Merging $json..."
-              jq -s '.[0].platforms * .[1].platforms as $p | .[0] + {platforms: $p}' release_assets/latest.json "$json" > release_assets/temp.json && mv release_assets/temp.json release_assets/latest.json
+          # Function to process artifacts
+          process_artifacts() {
+            local search_path=$1
+            # Find sig files
+            find "$search_path" -name "*.sig" | while read sig_path; do
+                echo "Found signature: $sig_path"
+                
+                # Determine Platform
+                local platform=""
+                if [[ "$sig_path" == *"macos"* ]] || [[ "$sig_path" == *"darwin"* ]]; then
+                    platform="darwin-aarch64"
+                elif [[ "$sig_path" == *"windows"* ]]; then
+                    platform="windows-x86_64"
+                fi
+                
+                if [ -n "$platform" ]; then
+                    local signature=$(cat "$sig_path")
+                    local bin_path=${sig_path%.sig}
+                    local bin_name=$(basename "$bin_path")
+                    local url="https://github.com/namphamdev/rust-coder-release/releases/download/$TAG_NAME/$bin_name"
+                    
+                    # Add to JSON
+                    tmp=$(mktemp)
+                    jq --arg p "$platform" --arg s "$signature" --arg u "$url" \
+                       '.platforms[$p] = {signature: $s, url: $u}' \
+                       release_assets/latest.json > "$tmp" && mv "$tmp" release_assets/latest.json
+                       
+                    # Copy to release assets
+                    cp "$sig_path" release_assets/
+                    if [ -f "$bin_path" ]; then
+                        cp "$bin_path" release_assets/
+                    fi
+                fi
             done
             
-            echo "Final latest.json content:"
-            cat release_assets/latest.json
-          else
-            echo "No JSON artifacts found, skipping merge."
-          fi
+            # Also copy other installers that might not have signatures or match the update format
+            # e.g. .dmg, .exe, .msi
+            find "$search_path" -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -exec cp -n {} release_assets/ \;
+          }
+          
+          process_artifacts "artifacts"
+          
+          echo "Final latest.json:"
+          cat release_assets/latest.json
           
           echo "Assets to publish:"
           ls -la release_assets/
