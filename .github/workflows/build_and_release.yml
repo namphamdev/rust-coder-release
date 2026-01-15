@@ -151,52 +151,71 @@ jobs:
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           echo '{"version": "'"$TAG_NAME"'", "notes": "Update for '"$TAG_NAME"'", "pub_date": "'"$PUB_DATE"'", "platforms": {}}' > release_assets/latest.json
           
-          # Function to process artifacts
-          process_artifacts() {
-            local search_path=$1
-            # Find sig files
-            find "$search_path" -name "*.sig" | while read sig_path; do
-                echo "Found signature: $sig_path"
-                
-                # Determine Platform
-                local platform=""
-                if [[ "$sig_path" == *"macos"* ]] || [[ "$sig_path" == *"darwin"* ]]; then
-                    platform="darwin-aarch64"
-                elif [[ "$sig_path" == *"windows"* ]]; then
-                    platform="windows-x86_64"
-                fi
-                
-                if [ -n "$platform" ]; then
-                    local signature=$(cat "$sig_path")
-                    local bin_path=${sig_path%.sig}
-                    local bin_name=$(basename "$bin_path")
-                    local url="https://github.com/namphamdev/rust-coder-release/releases/download/$TAG_NAME/$bin_name"
-                    
-                    # Add to JSON
-                    tmp=$(mktemp)
-                    jq --arg p "$platform" --arg s "$signature" --arg u "$url" \
-                       '.platforms[$p] = {signature: $s, url: $u}' \
-                       release_assets/latest.json > "$tmp" && mv "$tmp" release_assets/latest.json
-                       
-                    # Copy to release assets
-                    cp "$sig_path" release_assets/
-                    if [ -f "$bin_path" ]; then
-                        cp "$bin_path" release_assets/
-                    fi
-                fi
-            done
-            
-            # Also copy other installers that might not have signatures or match the update format
-            # e.g. .dmg, .exe, .msi
-            find "$search_path" -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -exec cp -n {} release_assets/ \;
-          }
+          echo "=== Listing all artifacts ==="
+          find artifacts -type f -ls
           
-          process_artifacts "artifacts"
+          echo "=== Processing signature files ==="
+          # Use process substitution to avoid subshell issues
+          while IFS= read -r -d '' sig_path; do
+              echo "Found signature: $sig_path"
+              
+              # Determine Platform based on path or filename
+              platform=""
+              if [[ "$sig_path" == *"aarch64-apple-darwin"* ]] || [[ "$sig_path" == *"macos"* ]] || [[ "$sig_path" == *"darwin"* ]]; then
+                  platform="darwin-aarch64"
+              elif [[ "$sig_path" == *"x86_64-apple-darwin"* ]]; then
+                  platform="darwin-x86_64"
+              elif [[ "$sig_path" == *"windows"* ]] || [[ "$sig_path" == *".msi.zip.sig"* ]] || [[ "$sig_path" == *".nsis.zip.sig"* ]]; then
+                  platform="windows-x86_64"
+              elif [[ "$sig_path" == *"linux"* ]]; then
+                  platform="linux-x86_64"
+              fi
+              
+              echo "  -> Detected platform: ${platform:-UNKNOWN}"
+              
+              if [ -n "$platform" ]; then
+                  signature=$(cat "$sig_path")
+                  bin_path="${sig_path%.sig}"
+                  bin_name=$(basename "$bin_path")
+                  url="https://github.com/namphamdev/rust-coder-release/releases/download/$TAG_NAME/$bin_name"
+                  
+                  echo "  -> Binary: $bin_name"
+                  echo "  -> URL: $url"
+                  
+                  # Add to JSON using jq
+                  jq --arg p "$platform" --arg s "$signature" --arg u "$url" \
+                     '.platforms[$p] = {signature: $s, url: $u}' \
+                     release_assets/latest.json > release_assets/latest.json.tmp && \
+                     mv release_assets/latest.json.tmp release_assets/latest.json
+                     
+                  # Copy signature and binary to release assets
+                  cp "$sig_path" release_assets/
+                  if [ -f "$bin_path" ]; then
+                      cp "$bin_path" release_assets/
+                      echo "  -> Copied binary to release_assets/"
+                  else
+                      echo "  -> WARNING: Binary not found at $bin_path"
+                  fi
+              fi
+          done < <(find artifacts -name "*.sig" -print0)
           
-          echo "Final latest.json:"
+          # Copy other installers (dmg, exe, msi) that might not have signatures
+          echo "=== Copying additional installers ==="
+          find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -exec cp -nv {} release_assets/ \;
+          
+          echo "=== Final latest.json ==="
           cat release_assets/latest.json
           
-          echo "Assets to publish:"
+          # Validate that platforms object is not empty
+          platform_count=$(jq '.platforms | length' release_assets/latest.json)
+          echo "=== Platform count: $platform_count ==="
+          if [ "$platform_count" -eq 0 ]; then
+              echo "ERROR: No platforms found in latest.json!"
+              echo "This will cause updater errors. Check if .sig files were generated."
+              exit 1
+          fi
+          
+          echo "=== Assets to publish ==="
           ls -la release_assets/
 
       - name: Create Release
