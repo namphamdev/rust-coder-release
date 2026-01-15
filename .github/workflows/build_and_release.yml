@@ -258,16 +258,12 @@ jobs:
           echo "=== Platform count: $platform_count ==="
           if [ "$platform_count" -eq 0 ]; then
               echo ""
-              echo "❌ ERROR: No platforms found in latest.json!"
-              echo "The Tauri updater will not work without signed artifacts."
+              echo "⚠️  WARNING: No signed platforms found in latest.json!"
+              echo "This is expected if TAURI_SIGNING_PRIVATE_KEY is not set in the build repo."
               echo ""
-              echo "REQUIRED FIXES in your private repo (namphamdev/rust-coder):"
-              echo "1. Ensure TAURI_SIGNING_PRIVATE_KEY secret is set"
-              echo "2. In src-tauri/tauri.conf.json, add/update:"
-              echo '   "bundle": { "targets": ["app", "dmg"] }'
-              echo '   "plugins": { "updater": { "active": true, "pubkey": "YOUR_PUBLIC_KEY" } }'
+              echo "The updater will not work, but DMG installers are still available."
+              echo "To enable auto-updates, set TAURI_SIGNING_PRIVATE_KEY in namphamdev/rust-coder secrets."
               echo ""
-              exit 1
           fi
           
           echo "=== Assets to publish ==="
