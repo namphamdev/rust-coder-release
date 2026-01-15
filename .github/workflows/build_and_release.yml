@@ -27,7 +27,7 @@ jobs:
       - name: Checkout Private Repository
         uses: actions/checkout@v4
         with:
-          repository: namphamdev/code-agent-gui
+          repository: namphamdev/rust-coder
           token: ${{ secrets.PRIVATE_REPO_ACCESS_TOKEN }}
           ref: ${{ inputs.private_branch }}
           path: . 
