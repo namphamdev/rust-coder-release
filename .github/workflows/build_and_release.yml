@@ -23,9 +23,9 @@ jobs:
           - platform: macos-14
             args: --target aarch64-apple-darwin
             targetPath: target/aarch64-apple-darwin/release/bundle
-          - platform: windows-latest
-            args: ""
-            targetPath: target/release/bundle
+          # - platform: windows-latest
+          #   args: ""
+          #   targetPath: target/release/bundle
 
     runs-on: ${{ matrix.platform }}
 
@@ -74,31 +74,6 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ./ui
         run: bun install
-
-      - name: Patch Tauri Configuration
-        working-directory: ./src-tauri
-        env:
-          TAURI_SIGNING_PUBLIC_KEY: ${{ secrets.TAURI_SIGNING_PUBLIC_KEY }}
-        run: |
-          echo "Patching tauri.conf.json to enable updater..."
-          if [ -f "tauri.conf.json" ]; then
-            # Enable updater and set endpoint
-            tmp=$(mktemp)
-            jq '.tauri.updater.active = true | .tauri.updater.endpoints = ["https://github.com/namphamdev/rust-coder-release/releases/latest/download/latest.json"]' tauri.conf.json > "$tmp" && mv "$tmp" tauri.conf.json
-            
-            # Inject Public Key if secret exists
-            if [ -n "$TAURI_SIGNING_PUBLIC_KEY" ]; then
-              echo "Injecting public key..."
-              tmp=$(mktemp)
-              jq --arg key "$TAURI_SIGNING_PUBLIC_KEY" '.tauri.updater.pubkey = $key' tauri.conf.json > "$tmp" && mv "$tmp" tauri.conf.json
-            fi
-            
-            cat tauri.conf.json
-          else
-            echo "tauri.conf.json not found in $(pwd)"
-            ls -R
-            exit 1
-          fi
 
       - name: Install Tauri CLI
         run: bun add --global @tauri-apps/cli
