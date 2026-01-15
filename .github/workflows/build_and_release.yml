@@ -124,10 +124,10 @@ jobs:
         with:
           name: artifacts-${{ matrix.platform }}
           path: |
-            src-tauri/${{ matrix.targetPath }}/dmg/*.dmg
-            src-tauri/${{ matrix.targetPath }}/nsis/*.exe
-            src-tauri/${{ matrix.targetPath }}/msi/*.msi
-            src-tauri/target/**/*.json
+            src-tauri/target/**/bundle/**/*.dmg
+            src-tauri/target/**/bundle/**/*.exe
+            src-tauri/target/**/bundle/**/*.msi
+            src-tauri/target/**/bundle/**/*.json
 
   publish:
     needs: build
