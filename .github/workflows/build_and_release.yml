@@ -83,7 +83,8 @@ jobs:
             VERSION=${VERSION:1}
           fi
           if [ -f "src-tauri/tauri.conf.json" ]; then
-            sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+            # Use Node.js for cross-platform JSON editing (works on Windows, macOS, Linux)
+            node -e "const fs=require('fs');const p='src-tauri/tauri.conf.json';const d=JSON.parse(fs.readFileSync(p,'utf8'));d.version='$VERSION';fs.writeFileSync(p,JSON.stringify(d,null,2));"
             echo "Updated version to $VERSION in src-tauri/tauri.conf.json"
             cat src-tauri/tauri.conf.json | grep version
           else
