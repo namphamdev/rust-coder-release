@@ -23,9 +23,9 @@ jobs:
           - platform: macos-14
             args: --target aarch64-apple-darwin
             targetPath: target/aarch64-apple-darwin/release/bundle
-          # - platform: windows-latest
-          #   args: ""
-          #   targetPath: target/release/bundle
+          - platform: windows-latest
+            args: ""
+            targetPath: target/release/bundle
 
     runs-on: ${{ matrix.platform }}
 
@@ -74,6 +74,20 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ./ui
         run: bun install
+
+      - name: Update Version in tauri.conf.json
+        run: |
+          VERSION=${{ inputs.tag_name }}
+          if [[ $VERSION == v* ]]; then
+            VERSION=${VERSION:1}
+          fi
+          if [ -f "src-tauri/tauri.conf.json" ]; then
+            sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+            echo "Updated version to $VERSION in src-tauri/tauri.conf.json"
+            cat src-tauri/tauri.conf.json | grep version
+          else
+            echo "Warning: src-tauri/tauri.conf.json not found"
+          fi
 
       - name: Install Tauri CLI
         run: bun add --global @tauri-apps/cli
