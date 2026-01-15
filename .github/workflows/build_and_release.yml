@@ -21,8 +21,8 @@ jobs:
       matrix:
         include:
           - platform: macos-14
-            args: --target universal-apple-darwin
-            targetPath: target/universal-apple-darwin/release/bundle
+            args: --target aarch64-apple-darwin
+            targetPath: target/aarch64-apple-darwin/release/bundle
           - platform: windows-latest
             args: ""
             targetPath: target/release/bundle
@@ -45,7 +45,7 @@ jobs:
 
       - name: Install macOS targets
         if: matrix.platform == 'macos-14'
-        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+        run: rustup target add aarch64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
