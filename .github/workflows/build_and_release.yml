@@ -56,6 +56,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+          cache-all-crates: "true"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
@@ -74,11 +75,17 @@ jobs:
         working-directory: ./ui
         run: bun install
 
+      - name: Install Tauri CLI
+        run: bun add --global @tauri-apps/cli
+
       - name: Build Tauri App
         uses: tauri-apps/tauri-action@v0
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         with:
           tagName: ${{ inputs.tag_name }}
           releaseName: 'App ${{ inputs.tag_name }}'
