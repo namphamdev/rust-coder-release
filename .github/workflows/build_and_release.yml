@@ -201,20 +201,21 @@ jobs:
               
               # Determine Platform based on path or filename
               platform=""
+              filename=$(basename "$sig_path")
               # macOS platforms
-              if [[ "$sig_path" == *"aarch64-apple-darwin"* ]] || [[ "$sig_path" == *"_aarch64.app.tar.gz.sig"* ]]; then
+              if [[ "$sig_path" == *"aarch64-apple-darwin"* ]] || [[ "$filename" == *"_aarch64.app.tar.gz.sig"* ]]; then
                   platform="darwin-aarch64"
-              elif [[ "$sig_path" == *"x86_64-apple-darwin"* ]] || [[ "$sig_path" == *"_x64.app.tar.gz.sig"* ]]; then
+              elif [[ "$sig_path" == *"x86_64-apple-darwin"* ]] || [[ "$filename" == *"_x64.app.tar.gz.sig"* ]]; then
                   platform="darwin-x86_64"
               # Windows platforms
-              elif [[ "$sig_path" == *"aarch64-pc-windows"* ]] || [[ "$sig_path" == *"_arm64"*".sig"* ]]; then
+              elif [[ "$sig_path" == *"aarch64-pc-windows"* ]] || [[ "$filename" == *"_arm64"*".sig"* ]]; then
                   platform="windows-aarch64"
-              elif [[ "$sig_path" == *"x86_64-pc-windows"* ]] || [[ "$sig_path" == *"windows"* ]] || [[ "$sig_path" == *".msi.zip.sig"* ]] || [[ "$sig_path" == *".nsis.zip.sig"* ]] || [[ "$sig_path" == *"_x64-setup.nsis.zip.sig"* ]]; then
+              elif [[ "$sig_path" == *"x86_64-pc-windows"* ]] || [[ "$filename" == *"windows"* ]] || [[ "$filename" == *".msi.zip.sig"* ]] || [[ "$filename" == *".nsis.zip.sig"* ]] || [[ "$filename" == *"_x64-setup.nsis.zip.sig"* ]]; then
                   platform="windows-x86_64"
               # Linux platforms
-              elif [[ "$sig_path" == *"aarch64-unknown-linux"* ]] || [[ "$sig_path" == *"_aarch64.AppImage.sig"* ]]; then
+              elif [[ "$sig_path" == *"aarch64-unknown-linux"* ]] || [[ "$filename" == *"_aarch64.AppImage.sig"* ]]; then
                   platform="linux-aarch64"
-              elif [[ "$sig_path" == *"x86_64-unknown-linux"* ]] || [[ "$sig_path" == *"linux"* ]] || [[ "$sig_path" == *".AppImage.sig"* ]]; then
+              elif [[ "$sig_path" == *"x86_64-unknown-linux"* ]] || [[ "$filename" == *"linux"* ]] || [[ "$filename" == *".AppImage.sig"* ]]; then
                   platform="linux-x86_64"
               fi
               
