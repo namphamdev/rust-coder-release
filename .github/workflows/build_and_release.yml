@@ -136,6 +136,7 @@ jobs:
           args: ${{ matrix.args }}
 
       - name: Debug - List all bundle files
+        shell: bash
         run: |
           echo "=== Listing all files in bundle directories ==="
           find . -path "*/bundle/*" -type f -ls 2>/dev/null || echo "No bundle files found"
