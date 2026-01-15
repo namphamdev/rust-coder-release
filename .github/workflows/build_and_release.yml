@@ -1,4 +1,4 @@
-name: Build and Release from Private Repo
+name: Build and Release Multi-Platform
 
 on:
   workflow_dispatch:
@@ -13,13 +13,19 @@ on:
         default: 'main'
 
 jobs:
-  release:
+  build:
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest]
+        include:
+          - platform: macos-latest
+            args: --target universal-apple-darwin
+            targetPath: target/universal-apple-darwin/release/bundle
+          - platform: windows-latest
+            args: ""
+            targetPath: target/release/bundle
 
     runs-on: ${{ matrix.platform }}
 
@@ -42,7 +48,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: ./ui
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Build frontend
         working-directory: ./ui
@@ -56,23 +62,58 @@ jobs:
         with:
           tagName: ${{ inputs.tag_name }}
           releaseName: 'App ${{ inputs.tag_name }}'
-          releaseBody: 'Automated build from private repository.'
           releaseDraft: true
           prerelease: false
-          args: --target universal-apple-darwin
+          args: ${{ matrix.args }}
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.platform }}
+          path: |
+            src-tauri/${{ matrix.targetPath }}/dmg/*.dmg
+            src-tauri/${{ matrix.targetPath }}/nsis/*.exe
+            src-tauri/${{ matrix.targetPath }}/msi/*.msi
+            src-tauri/target/**/*.json
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: Prepare Release Assets
         run: |
           mkdir release_assets
           
-          # Move DMG
-          # Check both locations (universal vs standard) to be safe
-          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg release_assets/ 2>/dev/null || cp src-tauri/target/release/bundle/dmg/*.dmg release_assets/
+          # Move binaries
+          find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -exec cp {} release_assets/ \;
           
-          # Find and Rename JSON
-          find src-tauri/target -name "*.json" -maxdepth 4 -exec cp {} release_assets/latest.json \;
+          # Merge JSONs for updater
+          # We use jq to merge the platforms object from all json files
+          # Make sure jq is installed (it is on ubuntu-latest)
           
-          echo "Listing assets:"
+          echo "Merging JSON update signatures..."
+          
+          # Start with an empty base structure or the first json found
+          FIRST_JSON=$(find artifacts -name "*.json" | head -n 1)
+          cp "$FIRST_JSON" release_assets/latest.json
+          
+          # Iterate over all JSONs and merge their 'platforms' key into latest.json
+          for json in $(find artifacts -name "*.json"); do
+            echo "Merging $json..."
+            jq -s '.[0].platforms * .[1].platforms as $p | .[0] + {platforms: $p}' release_assets/latest.json "$json" > release_assets/temp.json && mv release_assets/temp.json release_assets/latest.json
+          done
+          
+          echo "Final latest.json content:"
+          cat release_assets/latest.json
+          
+          echo "Assets to publish:"
           ls -la release_assets/
 
       - name: Create Release
