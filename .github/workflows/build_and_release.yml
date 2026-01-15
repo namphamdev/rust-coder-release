@@ -119,14 +119,34 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
+      - name: Debug - List all bundle files
+        run: |
+          echo "=== Listing all files in bundle directories ==="
+          find . -path "*/bundle/*" -type f -ls 2>/dev/null || echo "No bundle files found"
+          echo ""
+          echo "=== Looking for .sig files ==="
+          find . -name "*.sig" -type f -ls 2>/dev/null || echo "No .sig files found"
+          echo ""
+          echo "=== Looking for .tar.gz files ==="
+          find . -name "*.tar.gz" -type f -ls 2>/dev/null || echo "No .tar.gz files found"
+          echo ""
+          echo "=== Looking for .app.tar.gz files ==="
+          find . -name "*.app.tar.gz" -type f -ls 2>/dev/null || echo "No .app.tar.gz files found"
+
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: artifacts-${{ matrix.platform }}
           path: |
             **/target/**/bundle/**/*.dmg
+            **/target/**/bundle/**/*.app.tar.gz
+            **/target/**/bundle/**/*.app.tar.gz.sig
             **/target/**/bundle/**/*.exe
             **/target/**/bundle/**/*.msi
+            **/target/**/bundle/**/*.msi.zip
+            **/target/**/bundle/**/*.msi.zip.sig
+            **/target/**/bundle/**/*.nsis.zip
+            **/target/**/bundle/**/*.nsis.zip.sig
             **/target/**/bundle/**/*.zip
             **/target/**/bundle/**/*.sig
             **/target/**/bundle/**/*.json
@@ -154,6 +174,26 @@ jobs:
           echo "=== Listing all artifacts ==="
           find artifacts -type f -ls
           
+          echo "=== Checking for .sig files ==="
+          sig_count=$(find artifacts -name "*.sig" -type f | wc -l)
+          echo "Found $sig_count signature files"
+          
+          if [ "$sig_count" -eq 0 ]; then
+              echo ""
+              echo "⚠️  WARNING: No .sig files found!"
+              echo "This usually means one of the following:"
+              echo "  1. TAURI_SIGNING_PRIVATE_KEY secret is not set or empty"
+              echo "  2. TAURI_SIGNING_PRIVATE_KEY_PASSWORD is incorrect"
+              echo "  3. The updater is not enabled in tauri.conf.json"
+              echo "  4. Bundle targets don't include updater-compatible formats (.app.tar.gz for macOS)"
+              echo ""
+              echo "Please check:"
+              echo "  - Repository secrets have TAURI_SIGNING_PRIVATE_KEY set"
+              echo "  - tauri.conf.json has plugins.updater.active = true"
+              echo "  - tauri.conf.json bundle.targets includes 'app' (not just 'dmg')"
+              echo ""
+          fi
+          
           echo "=== Processing signature files ==="
           # Use process substitution to avoid subshell issues
           while IFS= read -r -d '' sig_path; do
@@ -161,13 +201,13 @@ jobs:
               
               # Determine Platform based on path or filename
               platform=""
-              if [[ "$sig_path" == *"aarch64-apple-darwin"* ]] || [[ "$sig_path" == *"macos"* ]] || [[ "$sig_path" == *"darwin"* ]]; then
+              if [[ "$sig_path" == *"aarch64-apple-darwin"* ]] || [[ "$sig_path" == *"_aarch64.app.tar.gz.sig"* ]]; then
                   platform="darwin-aarch64"
-              elif [[ "$sig_path" == *"x86_64-apple-darwin"* ]]; then
+              elif [[ "$sig_path" == *"x86_64-apple-darwin"* ]] || [[ "$sig_path" == *"_x64.app.tar.gz.sig"* ]]; then
                   platform="darwin-x86_64"
-              elif [[ "$sig_path" == *"windows"* ]] || [[ "$sig_path" == *".msi.zip.sig"* ]] || [[ "$sig_path" == *".nsis.zip.sig"* ]]; then
+              elif [[ "$sig_path" == *"windows"* ]] || [[ "$sig_path" == *".msi.zip.sig"* ]] || [[ "$sig_path" == *".nsis.zip.sig"* ]] || [[ "$sig_path" == *"_x64-setup.nsis.zip.sig"* ]]; then
                   platform="windows-x86_64"
-              elif [[ "$sig_path" == *"linux"* ]]; then
+              elif [[ "$sig_path" == *"linux"* ]] || [[ "$sig_path" == *".AppImage.sig"* ]]; then
                   platform="linux-x86_64"
               fi
               
@@ -210,8 +250,16 @@ jobs:
           platform_count=$(jq '.platforms | length' release_assets/latest.json)
           echo "=== Platform count: $platform_count ==="
           if [ "$platform_count" -eq 0 ]; then
-              echo "ERROR: No platforms found in latest.json!"
-              echo "This will cause updater errors. Check if .sig files were generated."
+              echo ""
+              echo "❌ ERROR: No platforms found in latest.json!"
+              echo "The Tauri updater will not work without signed artifacts."
+              echo ""
+              echo "REQUIRED FIXES in your private repo (namphamdev/rust-coder):"
+              echo "1. Ensure TAURI_SIGNING_PRIVATE_KEY secret is set"
+              echo "2. In src-tauri/tauri.conf.json, add/update:"
+              echo '   "bundle": { "targets": ["app", "dmg"] }'
+              echo '   "plugins": { "updater": { "active": true, "pubkey": "YOUR_PUBLIC_KEY" } }'
+              echo ""
               exit 1
           fi
           
