@@ -127,6 +127,8 @@ jobs:
             src-tauri/target/**/bundle/**/*.dmg
             src-tauri/target/**/bundle/**/*.exe
             src-tauri/target/**/bundle/**/*.msi
+            src-tauri/target/**/bundle/**/*.zip
+            src-tauri/target/**/bundle/**/*.sig
             src-tauri/target/**/bundle/**/*.json
 
   publish:
@@ -144,8 +146,8 @@ jobs:
         run: |
           mkdir release_assets
           
-          # Move binaries
-          find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -exec cp {} release_assets/ \;
+          # Move binaries and signatures
+          find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.zip" -o -name "*.sig" \) -exec cp {} release_assets/ \;
           
           # Merge JSONs for updater
           # We use jq to merge the platforms object from all json files
