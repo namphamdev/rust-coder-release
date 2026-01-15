@@ -26,6 +26,9 @@ jobs:
           - platform: windows-latest
             args: ""
             targetPath: target/release/bundle
+          - platform: ubuntu-22.04
+            args: ""
+            targetPath: target/release/bundle
 
     runs-on: ${{ matrix.platform }}
 
@@ -46,6 +49,12 @@ jobs:
       - name: Install macOS targets
         if: matrix.platform == 'macos-14'
         run: rustup target add aarch64-apple-darwin
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
@@ -167,6 +176,9 @@ jobs:
             **/target/**/bundle/**/*.zip
             **/target/**/bundle/**/*.sig
             **/target/**/bundle/**/*.json
+            **/target/**/bundle/**/*.AppImage
+            **/target/**/bundle/**/*.AppImage.sig
+            **/target/**/bundle/**/*.deb
 
   publish:
     needs: build
@@ -264,9 +276,9 @@ jobs:
               fi
           done < <(find artifacts -name "*.sig" -print0)
           
-          # Copy other installers (dmg, exe, msi) that might not have signatures
+          # Copy other installers (dmg, exe, msi, AppImage, deb) that might not have signatures
           echo "=== Copying additional installers ==="
-          find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -exec cp -nv {} release_assets/ \;
+          find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.AppImage" -o -name "*.deb" \) -exec cp -nv {} release_assets/ \;
           
           echo "=== Final latest.json ==="
           cat release_assets/latest.json
