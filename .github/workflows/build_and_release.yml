@@ -137,6 +137,8 @@ jobs:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          RUSTCODER_PORT: 7824
+          CONFIG_FOLDER: rust-coder
         with:
           tagName: ${{ inputs.tag_name }}
           releaseName: 'App ${{ inputs.tag_name }}'
