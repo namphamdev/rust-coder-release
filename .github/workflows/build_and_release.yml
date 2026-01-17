@@ -56,6 +56,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.4
+
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
         with:
@@ -114,16 +117,16 @@ jobs:
           security default-keychain -s build.keychain
           security unlock-keychain -p "" build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
-          
+
           echo "Decoding certificate..."
           echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
-          
+
           echo "Importing certificate..."
           security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          
+
           echo "Setting partition list..."
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
-          
+
           echo "Setting keychain search list..."
           security list-keychains -s build.keychain
 
@@ -139,6 +142,7 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           RUSTCODER_PORT: 7824
           CONFIG_FOLDER: rust-coder
+          RUSTC_WRAPPER: sccache
         with:
           tagName: ${{ inputs.tag_name }}
           releaseName: 'App ${{ inputs.tag_name }}'
@@ -196,19 +200,19 @@ jobs:
       - name: Prepare Release Assets
         run: |
           mkdir -p release_assets
-          
+
           echo "Initializing latest.json..."
           TAG_NAME="${{ inputs.tag_name }}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           echo '{"version": "'"$TAG_NAME"'", "notes": "Update for '"$TAG_NAME"'", "pub_date": "'"$PUB_DATE"'", "platforms": {}}' > release_assets/latest.json
-          
+
           echo "=== Listing all artifacts ==="
           find artifacts -type f -ls
-          
+
           echo "=== Checking for .sig files ==="
           sig_count=$(find artifacts -name "*.sig" -type f | wc -l)
           echo "Found $sig_count signature files"
-          
+
           if [ "$sig_count" -eq 0 ]; then
               echo ""
               echo "⚠️  WARNING: No .sig files found!"
@@ -224,12 +228,12 @@ jobs:
               echo "  - tauri.conf.json bundle.targets includes 'app' (not just 'dmg')"
               echo ""
           fi
-          
+
           echo "=== Processing signature files ==="
           # Use process substitution to avoid subshell issues
           while IFS= read -r -d '' sig_path; do
               echo "Found signature: $sig_path"
-              
+
               # Determine Platform based on path or filename
               platform=""
               filename=$(basename "$sig_path")
@@ -249,24 +253,24 @@ jobs:
               elif [[ "$sig_path" == *"x86_64-unknown-linux"* ]] || [[ "$filename" == *"linux"* ]] || [[ "$filename" == *".AppImage.sig"* ]]; then
                   platform="linux-x86_64"
               fi
-              
+
               echo "  -> Detected platform: ${platform:-UNKNOWN}"
-              
+
               if [ -n "$platform" ]; then
                   signature=$(cat "$sig_path")
                   bin_path="${sig_path%.sig}"
                   bin_name=$(basename "$bin_path")
                   url="https://github.com/namphamdev/rust-coder-release/releases/download/$TAG_NAME/$bin_name"
-                  
+
                   echo "  -> Binary: $bin_name"
                   echo "  -> URL: $url"
-                  
+
                   # Add to JSON using jq
                   jq --arg p "$platform" --arg s "$signature" --arg u "$url" \
                      '.platforms[$p] = {signature: $s, url: $u}' \
                      release_assets/latest.json > release_assets/latest.json.tmp && \
                      mv release_assets/latest.json.tmp release_assets/latest.json
-                     
+
                   # Copy signature and binary to release assets
                   cp "$sig_path" release_assets/
                   if [ -f "$bin_path" ]; then
@@ -277,14 +281,14 @@ jobs:
                   fi
               fi
           done < <(find artifacts -name "*.sig" -print0)
-          
+
           # Copy other installers (dmg, exe, msi, AppImage, deb) that might not have signatures
           echo "=== Copying additional installers ==="
           find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.AppImage" -o -name "*.deb" \) -exec cp -nv {} release_assets/ \;
-          
+
           echo "=== Final latest.json ==="
           cat release_assets/latest.json
-          
+
           # Validate that platforms object is not empty
           platform_count=$(jq '.platforms | length' release_assets/latest.json)
           echo "=== Platform count: $platform_count ==="
@@ -297,7 +301,7 @@ jobs:
               echo "To enable auto-updates, set TAURI_SIGNING_PRIVATE_KEY in namphamdev/rust-coder secrets."
               echo ""
           fi
-          
+
           echo "=== Assets to publish ==="
           ls -la release_assets/
 
