@@ -46,9 +46,11 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install macOS targets
+      - name: Install macOS dependencies
         if: matrix.platform == 'macos-14'
-        run: rustup target add aarch64-apple-darwin
+        run: |
+          rustup target add aarch64-apple-darwin
+          brew install llvm
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
